@@ -2,19 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-        <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-                <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-                    <application
-                            android:label="AudioProbe"
-                                    android:requestLegacyExternalStorage="true">
+    <application
+        android:label="AudioProbe"
+        android:requestLegacyExternalStorage="true">
 
-                                            <!-- exported : permet de le demarrer depuis le shell avec "am start-foreground-service" -->
-                                                    <service
-                                                                android:name=".ProbeService"
-                                                                            android:exported="true" />
+        <!-- exported : permet de le demarrer depuis le shell avec "am start-foreground-service" -->
+        <service
+            android:name=".ProbeService"
+            android:exported="true" />
 
-                                                                                </application>
+    </application>
 
-                                                                                </manifest>
+</manifest>
