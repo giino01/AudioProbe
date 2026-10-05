@@ -12,6 +12,7 @@ import java.lang.reflect.Method;
  *
  * get <device> <fid-hex> [<fid-hex> ...]  : lit les identifiants (aucune ecriture)
  * set <device> <fid-hex> <valeur>         : lit avant, ecrit, relit apres
+ * seq <device> fid=val ... wNNN ...       : ecritures enchainees, wNNN = pause NNN ms
  *
  * Tout passe par reflexion (aucune dependance Android a la compilation).
  * Chemin repris du code d'Overdrive (AvasController / BydModeCommand) :
@@ -92,6 +93,25 @@ public final class Poker {
             Thread.sleep(300);
             System.out.println("APRES  dev=" + dev + " fid=0x" + Integer.toHexString(fid)
                     + " -> " + callGet(getInt, mgr, dev, fid));
+            return 0;
+        }
+
+        if ("seq".equals(mode)) {
+            // seq <dev> fid=val fid=val w100 fid=val ...  (wNNN = pause NNN ms)
+            Method setInt = mgr.getClass().getMethod("setInt", int.class, int.class, int.class);
+            for (int i = 2; i < args.length; i++) {
+                String a = args[i];
+                if (a.startsWith("w")) {
+                    Thread.sleep(Long.parseLong(a.substring(1)));
+                    continue;
+                }
+                int eq = a.indexOf('=');
+                int fid = parseFid(a.substring(0, eq));
+                int val = Integer.parseInt(a.substring(eq + 1));
+                Object r = setInt.invoke(mgr, dev, fid, val);
+                System.out.println("SEQ " + System.currentTimeMillis() % 100000
+                        + " fid=0x" + Integer.toHexString(fid) + " val=" + val + " -> " + r);
+            }
             return 0;
         }
 
