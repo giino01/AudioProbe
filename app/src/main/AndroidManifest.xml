@@ -10,10 +10,16 @@
         android:label="AudioProbe"
         android:requestLegacyExternalStorage="true">
 
-        <!-- exported : permet de le demarrer depuis le shell avec "am start-foreground-service" -->
         <service
             android:name=".ProbeService"
             android:exported="true" />
+
+        <!-- point d'entree pour le shell : am start -n com.giino.audioprobe/.ProbeActivity -->
+        <activity
+            android:name=".ProbeActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
     </application>
 
