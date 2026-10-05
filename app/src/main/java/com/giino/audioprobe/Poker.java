@@ -7,8 +7,8 @@ import java.lang.reflect.Method;
  * Outil en ligne de commande, lance depuis le shell (uid 2000) :
  *
  *   APK=$(pm path com.giino.audioprobe | sed 's/package://')
- *   CLASSPATH=$APK app_process /system/bin com.giino.audioprobe.Poke get 1002 aa000221 aa00011e
- *   CLASSPATH=$APK app_process /system/bin com.giino.audioprobe.Poke set 1002 aa000221 2
+ *   CLASSPATH=$APK app_process /system/bin com.giino.audioprobe.Poker get 1002 aa000221 aa00011e
+ *   CLASSPATH=$APK app_process /system/bin com.giino.audioprobe.Poker set 1002 aa000221 2
  *
  * get <device> <fid-hex> [<fid-hex> ...]  : lit les identifiants (aucune ecriture)
  * set <device> <fid-hex> <valeur>         : lit avant, ecrit, relit apres
@@ -17,11 +17,11 @@ import java.lang.reflect.Method;
  * Chemin repris du code d'Overdrive (AvasController / BydModeCommand) :
  *   Context systeme -> createPackageContext -> getSystemService("auto") -> getInt/setInt
  */
-public final class Poke {
+public final class Poker {
 
     private static final String PKG = "com.giino.audioprobe";
 
-    private Poke() {}
+    private Poker() {}
 
     public static void main(String[] args) {
         // garde-fou : systemMain() peut se bloquer sur certains firmwares
