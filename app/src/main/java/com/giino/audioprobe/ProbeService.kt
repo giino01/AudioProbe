@@ -27,9 +27,11 @@ import kotlin.math.sqrt
 /**
  * Test : joue un mp3 avec un MediaPlayer ordinaire et mesure le niveau du micro
  * 5 s avant, pendant (12 s max) et 5 s apres la lecture.
+ * Les phases suivent l'horloge : la lecture du mp3 demarre a 5 s meme si le micro ne
+ * livre aucune donnee (lecture du micro non bloquante).
  *
  * Lancement (depuis le shell) :
- *   am start-foreground-service -n com.giino.audioprobe/.ProbeService \
+ *   am start -n com.giino.audioprobe/.ProbeActivity \
  *       --es path /sdcard/Electro/audio/nunu_1.mp3 --ei src 1
  *
  * Extras : path = fichier mp3 ; src = source micro (1 MIC, 5 CAMCORDER, 6 VOICE_RECOGNITION,
@@ -52,6 +54,7 @@ class ProbeService : Service() {
     private class Stats {
         var n = 0
         var zero = 0
+        var empty = 0
         var sumDb = 0.0
         var minDb = 999.0
         var maxDb = -999.0
@@ -70,12 +73,12 @@ class ProbeService : Service() {
 
         fun text(): String =
             if (n == 0) {
-                "aucune mesure"
+                "aucune mesure, lectures_vides=$empty"
             } else {
                 String.format(
                     Locale.US,
-                    "blocs=%d moy=%.1f min=%.1f max=%.1f dBFS, pic=%d, blocs_zero=%d",
-                    n, avg(), minDb, maxDb, peak, zero
+                    "blocs=%d moy=%.1f min=%.1f max=%.1f dBFS, pic=%d, blocs_zero=%d, lectures_vides=%d",
+                    n, avg(), minDb, maxDb, peak, zero, empty
                 )
             }
     }
@@ -214,8 +217,10 @@ class ProbeService : Service() {
             var errors = 0
             var secSum = 0.0
             var secN = 0
+            var secEmpty = 0
             var secPhase = 'A'
             var lastSec = 0L
+            var firstDataMs = -1L
 
             while (true) {
                 val now = SystemClock.elapsedRealtime() - t0
@@ -244,60 +249,77 @@ class ProbeService : Service() {
                     break
                 }
 
-                val n = rec.read(buf, 0, chunk)
-                if (n <= 0) {
+                // lecture NON bloquante : renvoie 0 tout de suite s'il n'y a pas de donnees
+                val n = rec.read(buf, 0, chunk, AudioRecord.READ_NON_BLOCKING)
+                if (n < 0) {
                     errors++
                     say("lecture micro: $n")
                     if (errors >= 3) break
+                    SystemClock.sleep(50)
                     continue
                 }
 
-                var sumSq = 0.0
-                var peak = 0
-                var nonZero = false
-                for (i in 0 until n) {
-                    val s = buf[i].toInt()
-                    sumSq += (s * s).toDouble()
-                    val ab = if (s < 0) -s else s
-                    if (ab > peak) peak = ab
-                    if (s != 0) nonZero = true
-                }
-                val rms = sqrt(sumSq / n)
-                val db = if (rms < 1.0) -120.0 else 20.0 * log10(rms / 32768.0)
+                if (n == 0) {
+                    when (phase) {
+                        'A' -> a.empty++
+                        'B' -> b.empty++
+                        else -> c.empty++
+                    }
+                    secEmpty++
+                    SystemClock.sleep(20)
+                } else {
+                    if (firstDataMs < 0) {
+                        firstDataMs = now
+                        say("premieres donnees micro a t=${now} ms")
+                    }
 
-                when (phase) {
-                    'A' -> a.add(db, !nonZero, peak)
-                    'B' -> b.add(db, !nonZero, peak)
-                    else -> c.add(db, !nonZero, peak)
+                    var sumSq = 0.0
+                    var peak = 0
+                    var nonZero = false
+                    for (i in 0 until n) {
+                        val s = buf[i].toInt()
+                        sumSq += (s * s).toDouble()
+                        val ab = if (s < 0) -s else s
+                        if (ab > peak) peak = ab
+                        if (s != 0) nonZero = true
+                    }
+                    val rms = sqrt(sumSq / n)
+                    val db = if (rms < 1.0) -120.0 else 20.0 * log10(rms / 32768.0)
+
+                    when (phase) {
+                        'A' -> a.add(db, !nonZero, peak)
+                        'B' -> b.add(db, !nonZero, peak)
+                        else -> c.add(db, !nonZero, peak)
+                    }
+
+                    secSum += db
+                    secN++
                 }
 
-                if (secN == 0) secPhase = phase
-                secSum += db
-                secN++
                 val sec = now / 1000
                 if (sec != lastSec) {
-                    say(
-                        String.format(
-                            Locale.US, "t=%ds phase=%c niveau=%.1f dBFS",
-                            lastSec, secPhase, secSum / secN
-                        )
-                    )
+                    val level = if (secN == 0) {
+                        "aucune donnee"
+                    } else {
+                        String.format(Locale.US, "%.1f dBFS", secSum / secN)
+                    }
+                    say("t=${lastSec}s phase=$secPhase niveau=$level lectures_vides=$secEmpty")
                     secSum = 0.0
                     secN = 0
+                    secEmpty = 0
                     lastSec = sec
+                    secPhase = phase
                 }
+            }
+
+            if (firstDataMs < 0) {
+                say("AUCUNE donnee micro recue pendant tout le test")
             }
         } catch (t: Throwable) {
             say("erreur pendant la mesure: $t")
         } finally {
             stopPlayer(player)
             am.abandonAudioFocus(focusListener)
-            try {
-                rec.stop()
-            } catch (e: Throwable) {
-                // ignore
-            }
-            rec.release()
         }
 
         say("RESUME A (avant)  : ${a.text()}")
@@ -311,6 +333,20 @@ class ProbeService : Service() {
                 )
             )
         }
+
+        // arret du micro dans un thread a part : stop() peut bloquer longtemps si le micro est fige
+        Thread {
+            try {
+                rec.stop()
+            } catch (e: Throwable) {
+                // ignore
+            }
+            try {
+                rec.release()
+            } catch (e: Throwable) {
+                // ignore
+            }
+        }.start()
     }
 
     private fun startPlayer(file: File): MediaPlayer? {
